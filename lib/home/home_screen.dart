@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'widgets/chat_tile.dart';
+import '../home/widgets/chat_tile.dart';
 import '../../utils/greeting_utils.dart';
-import '../settings/settings_screen.dart';
+import '../chat/chat_screen.dart';
+import '../profile/profile_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   final String userName;
@@ -14,97 +15,208 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F7),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // 🔵 CUSTOM TOP BAR
-            Container(
-              height: 120,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-              decoration: const BoxDecoration(
-                color: Color(0xFF3F3DFF),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(20),
-                  bottomRight: Radius.circular(20),
-                ),
+      body: Column(
+        children: [
+          // 🔵 TOP HEADER (NO OVERFLOW)
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+            decoration: const BoxDecoration(
+              color: Color(0xFF1C4ED8),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(26),
+                bottomRight: Radius.circular(26),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 👤 USER + GREETING
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          "Hi, $greeting",
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
+                  // 🔝 TOP ROW
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ProfileScreen(),
+                            ),
+                          );
+                        },
+                        child: const CircleAvatar(
+                          radius: 24,
+                          backgroundImage: AssetImage(
+                            "assets/images/profile.png",
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          userName, // 🔥 dynamic username
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      ),
+
+                      const Spacer(),
+
+                      // 🌡 TEMPERATURE
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
                         ),
-                      ],
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.wb_sunny, color: Colors.white, size: 18),
+                            SizedBox(width: 6),
+                            Text("48°C", style: TextStyle(color: Colors.white)),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(width: 10),
+
+                      // ⚙ SETTINGS
+                      IconButton(
+                        icon: const Icon(Icons.settings, color: Colors.white),
+                        onPressed: () {
+                          Navigator.pushNamed(context, '/settings');
+                        },
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // 👋 GREETING
+                  Text(
+                    "Hi, $greeting",
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  // 👤 USER NAME
+                  Text(
+                    userName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
 
-                  // 🌡️ TEMPERATURE
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.wb_sunny, color: Colors.white, size: 18),
-                        SizedBox(width: 6),
-                        Text("48°C", style: TextStyle(color: Colors.white)),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 18),
 
-                  const SizedBox(width: 10),
-
-                  // ⚙️ SETTINGS ICON
-                  IconButton(
-                    icon: const Icon(Icons.settings, color: Colors.white),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const SettingsScreen(),
+                  // 👥 USER COUNTS
+                  Row(
+                    children: const [
+                      Expanded(
+                        child: _UserCountCard(
+                          title: "Registered Users",
+                          count: "190",
                         ),
-                      );
-                    },
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: _UserCountCard(
+                          title: "Online Users",
+                          count: "86",
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
+          ),
 
-            // 🧾 CHAT LIST
-            Expanded(
-              child: ListView(
-                children: const [
-                  ChatTile(name: "Rajesh", message: "Hello", unread: 2),
-                  ChatTile(name: "Suresh", message: "Good Morning", unread: 0),
-                ],
-              ),
+          // 🧾 CHAT LIST
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(top: 8),
+              children: [
+                ChatTile(
+                  name: "Venkatesh",
+                  message: "Meet me Tomorrow",
+                  time: "05:26 PM",
+                  unread: 2,
+                  online: true,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => const ChatScreen(
+                              userName: "Venkatesh",
+                              profileImage:
+                                  "assets/images/profile.png", // ✅ fixed
+                            ),
+                      ),
+                    );
+                  },
+                ),
+
+                ChatTile(
+                  name: "Rajesh",
+                  message: "Did you have your Lunch?",
+                  time: "05:26 PM",
+                  unread: 1,
+                  online: true,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => const ChatScreen(
+                              userName: "Rajesh",
+                              profileImage: "assets/images/pk.png", // ✅ exists
+                            ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// 🟢 USER COUNT CARD (SAFE SIZE)
+class _UserCountCard extends StatelessWidget {
+  final String title;
+  final String count;
+
+  const _UserCountCard({required this.title, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            count,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ],
       ),
     );
   }
