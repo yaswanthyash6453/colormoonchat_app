@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ChatScreen extends StatefulWidget {
   final String userName;
-  final String profileImage;
+  final String photoUrl; // 🔥 Firestore image URL (may be empty)
+  final String otherUserId;
 
   const ChatScreen({
     super.key,
     required this.userName,
-    required this.profileImage,
+    required this.photoUrl,
+    required this.otherUserId,
   });
 
   @override
@@ -15,168 +19,281 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  List<String> messages = [
-    "Hello",
-    "Where are you",
-    "Vizag, Where are you from",
-    "Did you had lunch",
-    "Yes, Yourself",
-    "Did you know me?",
-  ];
+  final TextEditingController _messageController = TextEditingController();
 
-  // 🧹 CLEAR CHAT CONFIRMATION
-  void _showClearChatDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (_) => AlertDialog(
-            title: const Text("Clear Chat"),
-            content: const Text("Are you sure to Clear Chat?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("No"),
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() => messages.clear());
-                  Navigator.pop(context);
-                },
-                child: const Text("Yes", style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
-    );
+  final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
+  late final String chatId;
+
+  bool isBlocked = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final ids = [currentUserId, widget.otherUserId]..sort();
+    chatId = ids.join("_");
+
+    _markMessagesAsSeen();
+    _checkBlockedStatus();
   }
 
-  // 🚫 BLOCK CONTACT CONFIRMATION
-  void _showBlockDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (_) => AlertDialog(
-            title: const Text("Block the Contact"),
-            content: const Text(
-              "Are you sure you want to Block the Contact?\n\n"
-              "If you block this contact you can't able to "
-              "get or send the messages",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("No"),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Contact Blocked")),
-                  );
-                },
-                child: const Text("Yes", style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
-    );
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
   }
 
-  // ⋮ MENU CLICK
-  void _onMenuSelected(String value) {
-    if (value == "block") {
-      _showBlockDialog();
-    } else if (value == "clear") {
-      _showClearChatDialog();
+  // ---------------- BLOCK ----------------
+
+  Future<void> _checkBlockedStatus() async {
+    final doc =
+        await FirebaseFirestore.instance
+            .collection('blocked')
+            .doc(currentUserId)
+            .get();
+
+    if (doc.exists && doc.data()!.containsKey(widget.otherUserId)) {
+      setState(() => isBlocked = true);
     }
   }
+
+  Future<void> _blockUser() async {
+    await FirebaseFirestore.instance
+        .collection('blocked')
+        .doc(currentUserId)
+        .set({widget.otherUserId: true}, SetOptions(merge: true));
+
+    setState(() => isBlocked = true);
+  }
+
+  Future<void> _unblockUser() async {
+    await FirebaseFirestore.instance
+        .collection('blocked')
+        .doc(currentUserId)
+        .update({widget.otherUserId: FieldValue.delete()});
+
+    setState(() => isBlocked = false);
+  }
+
+  // ---------------- SEEN ----------------
+
+  Future<void> _markMessagesAsSeen() async {
+    final snap =
+        await FirebaseFirestore.instance
+            .collection('chats')
+            .doc(chatId)
+            .collection('messages')
+            .where('receiverId', isEqualTo: currentUserId)
+            .where('isSeen', isEqualTo: false)
+            .get();
+
+    for (var doc in snap.docs) {
+      doc.reference.update({
+        'isSeen': true,
+        'seenBy': FieldValue.arrayUnion([currentUserId]),
+      });
+    }
+  }
+
+  // ---------------- SEND ----------------
+
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty || isBlocked) return;
+
+    await FirebaseFirestore.instance
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .add({
+          'text': text,
+          'senderId': currentUserId,
+          'receiverId': widget.otherUserId,
+          'timestamp': FieldValue.serverTimestamp(),
+          'isSeen': false,
+          'seenBy': [],
+          'deletedFor': [],
+        });
+
+    _messageController.clear();
+  }
+
+  // ---------------- UI ----------------
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF1ECE6),
+
+      // ================= APP BAR =================
       appBar: AppBar(
         backgroundColor: const Color(0xFF1B47D6),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
+
         title: Row(
           children: [
-            CircleAvatar(backgroundImage: AssetImage(widget.profileImage)),
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.grey.shade300,
+              child: ClipOval(
+                child:
+                    widget.photoUrl.isNotEmpty
+                        ? Image.network(
+                          widget.photoUrl,
+                          width: 36,
+                          height: 36,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) {
+                            return Image.asset(
+                              "assets/images/profile.png",
+                              fit: BoxFit.cover,
+                            );
+                          },
+                        )
+                        : Image.asset(
+                          "assets/images/profile.png",
+                          width: 36,
+                          height: 36,
+                          fit: BoxFit.cover,
+                        ),
+              ),
+            ),
             const SizedBox(width: 10),
-            Text(widget.userName, style: const TextStyle(color: Colors.white)),
+            Text(widget.userName),
           ],
         ),
+
         actions: [
           IconButton(
             icon: const Icon(Icons.delete, color: Colors.white),
-            onPressed: _showClearChatDialog,
+            onPressed: () {},
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            onSelected: _onMenuSelected,
+            iconColor: Colors.white,
+            onSelected: (v) {
+              if (v == 'block') {
+                isBlocked ? _unblockUser() : _blockUser();
+              }
+            },
             itemBuilder:
-                (_) => const [
+                (_) => [
                   PopupMenuItem(
-                    value: "block",
-                    child: Text("Block the Contact"),
+                    value: 'block',
+                    child: Text(
+                      isBlocked ? "Unblock Contact" : "Block Contact",
+                    ),
                   ),
-                  PopupMenuItem(value: "clear", child: Text("Clear Chat")),
                 ],
           ),
         ],
       ),
 
-      // 💬 CHAT BODY
-      body: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: messages.length,
-        itemBuilder: (_, index) {
-          final isMe = index.isOdd;
-          return Align(
-            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-            child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isMe ? Colors.blue : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                messages[index],
-                style: TextStyle(color: isMe ? Colors.white : Colors.black),
-              ),
-            ),
+      // ================= CHAT BODY =================
+      body: StreamBuilder<QuerySnapshot>(
+        stream:
+            FirebaseFirestore.instance
+                .collection('chats')
+                .doc(chatId)
+                .collection('messages')
+                .orderBy('timestamp')
+                .snapshots(),
+        builder: (context, snap) {
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final docs = snap.data!.docs;
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: docs.length,
+            itemBuilder: (_, i) {
+              final raw = docs[i].data() as Map<String, dynamic>;
+              final deletedFor = (raw['deletedFor'] ?? []) as List;
+
+              if (deletedFor.contains(currentUserId)) {
+                return const SizedBox.shrink();
+              }
+
+              final isMe = raw['senderId'] == currentUserId;
+
+              return Align(
+                alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isMe ? Colors.blue : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        raw['text'] ?? "",
+                        style: TextStyle(
+                          color: isMe ? Colors.white : Colors.black,
+                        ),
+                      ),
+                      if (isMe)
+                        Icon(
+                          raw['isSeen'] == true ? Icons.done_all : Icons.done,
+                          size: 14,
+                          color:
+                              raw['isSeen'] == true
+                                  ? Colors.lightBlue
+                                  : Colors.white70,
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
           );
         },
       ),
 
-      // ⌨ INPUT BAR
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: "Type your message here",
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(30),
-                    borderSide: BorderSide.none,
-                  ),
+      // ================= INPUT =================
+      bottomNavigationBar:
+          isBlocked
+              ? Container(
+                padding: const EdgeInsets.all(16),
+                color: Colors.grey.shade200,
+                child: const Text(
+                  "You blocked this contact",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.red),
+                ),
+              )
+              : Padding(
+                padding: const EdgeInsets.all(8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        decoration: InputDecoration(
+                          hintText: "Type message",
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _sendMessage,
+                      child: const CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Colors.blue,
+                        child: Icon(Icons.send, color: Colors.white),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: Colors.blue,
-              child: const Icon(Icons.send, color: Colors.white),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

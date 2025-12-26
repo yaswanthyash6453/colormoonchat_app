@@ -13,6 +13,9 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
   bool moved = false;
   int questionIndex = 0;
 
+  Timer? _avatarTimer;
+  Timer? _questionTimer;
+
   final List<String> questions = [
     "Who do you want to chat with today?",
     "Ready to start a conversation?",
@@ -24,16 +27,25 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
     super.initState();
 
     // 🔄 Avatar movement
-    Timer.periodic(const Duration(seconds: 2), (_) {
-      setState(() => moved = !moved);
+    _avatarTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted) setState(() => moved = !moved);
     });
 
     // 🔄 Question change
-    Timer.periodic(const Duration(seconds: 3), (_) {
-      setState(() {
-        questionIndex = (questionIndex + 1) % questions.length;
-      });
+    _questionTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) {
+        setState(() {
+          questionIndex = (questionIndex + 1) % questions.length;
+        });
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    _avatarTimer?.cancel();
+    _questionTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -46,7 +58,7 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
           children: [
             const SizedBox(height: 20),
 
-            // 🔵 MOVING AVATARS + EMOJIS
+            // 🔵 MOVING AVATARS
             SizedBox(
               height: 280,
               child: Stack(
@@ -76,27 +88,11 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                     size: 80,
                     image: 'assets/images/image4.png',
                   ),
-
-                  const Positioned(
-                    top: 60,
-                    right: 120,
-                    child: Text("😡", style: TextStyle(fontSize: 28)),
-                  ),
-                  const Positioned(
-                    bottom: 60,
-                    left: 80,
-                    child: Text("🥰", style: TextStyle(fontSize: 28)),
-                  ),
-                  const Positioned(
-                    bottom: 40,
-                    right: 90,
-                    child: Text("🤔", style: TextStyle(fontSize: 28)),
-                  ),
                 ],
               ),
             ),
 
-            // 📝 TEXT CONTENT + QUESTIONS
+            // 📝 TEXT
             Column(
               children: [
                 const Text(
@@ -114,18 +110,8 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // 🔥 AUTO CHANGING QUESTION
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 600),
-                  transitionBuilder: (child, animation) {
-                    return SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.5),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: FadeTransition(opacity: animation, child: child),
-                    );
-                  },
                   child: Padding(
                     key: ValueKey(questionIndex),
                     padding: const EdgeInsets.symmetric(horizontal: 30),
@@ -139,7 +125,7 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
               ],
             ),
 
-            // 🟢 GET STARTED BUTTON
+            // 🟢 GET STARTED
             Padding(
               padding: const EdgeInsets.only(left: 30, right: 30, bottom: 30),
               child: SizedBox(
@@ -175,7 +161,6 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
     );
   }
 
-  // 🔹 Animated Avatar Widget (FIXED)
   Widget _animatedAvatar({
     double? top,
     double? left,
@@ -190,10 +175,7 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
       left: left,
       right: right,
       bottom: bottom,
-      child: CircleAvatar(
-        radius: size / 2,
-        backgroundImage: AssetImage(image), // ✅ FIX
-      ),
+      child: CircleAvatar(radius: size / 2, backgroundImage: AssetImage(image)),
     );
   }
 }

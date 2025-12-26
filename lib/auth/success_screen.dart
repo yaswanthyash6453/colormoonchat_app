@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../home/home_screen.dart';
 import '../auth/login_screen.dart';
 
 class SuccessScreen extends StatefulWidget {
@@ -11,17 +14,37 @@ class SuccessScreen extends StatefulWidget {
 }
 
 class _SuccessScreenState extends State<SuccessScreen> {
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
 
-    // ⏱️ 3 seconds taruvatha Login Screen
-    Timer(const Duration(seconds: 3), () {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
+    _timer = Timer(const Duration(seconds: 3), () {
+      if (!mounted) return;
+
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user != null) {
+        // ✅ Logged in → Home (ONLY userId)
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => HomeScreen(userId: user.uid)),
+        );
+      } else {
+        // ❌ Not logged in → Login
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -40,7 +63,7 @@ class _SuccessScreenState extends State<SuccessScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // ✔ TICK
+                // ✔ SUCCESS TICK
                 Container(
                   width: 140,
                   height: 140,
@@ -69,7 +92,7 @@ class _SuccessScreenState extends State<SuccessScreen> {
                 const SizedBox(height: 10),
 
                 const Text(
-                  "Your Profile has been created\nEnjoy the Chat Us!",
+                  "Your Profile has been created\nEnjoy Chat Us!",
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: Colors.white70),
                 ),

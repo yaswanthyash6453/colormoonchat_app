@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 class ChatTile extends StatelessWidget {
@@ -6,33 +7,53 @@ class ChatTile extends StatelessWidget {
   final String time;
   final int unread;
   final bool online;
-  final VoidCallback? onTap; // ✅ ADD THIS
+  final VoidCallback? onTap;
+
+  // 🔥 IMAGE SOURCES
+  final String? photoUrlPath; // local file path
+  final String? photoUrl; // firestore / network url
 
   const ChatTile({
     super.key,
     required this.name,
     required this.message,
-    required this.time,
-    required this.unread,
+    this.time = "",
+    this.unread = 0,
     required this.online,
-    this.onTap, // ✅ ADD THIS
+    this.onTap,
+    this.photoUrlPath,
+    this.photoUrl,
   });
 
   @override
   Widget build(BuildContext context) {
+    ImageProvider avatar;
+
+    // ✅ PRIORITY 1: LOCAL IMAGE
+    if (photoUrlPath != null &&
+        photoUrlPath!.isNotEmpty &&
+        File(photoUrlPath!).existsSync()) {
+      avatar = FileImage(File(photoUrlPath!));
+
+      // ✅ PRIORITY 2: FIRESTORE / NETWORK IMAGE
+    } else if (photoUrl != null && photoUrl!.isNotEmpty) {
+      avatar = NetworkImage(photoUrl!);
+
+      // ✅ PRIORITY 3: DEFAULT ASSET
+    } else {
+      avatar = const AssetImage("assets/images/profile.png");
+    }
+
     return InkWell(
-      onTap: onTap, // ✅ TAP HANDLER
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            // 👤 PROFILE + ONLINE DOT
+            // 🔵 PROFILE IMAGE + ONLINE DOT
             Stack(
               children: [
-                const CircleAvatar(
-                  radius: 26,
-                  backgroundImage: AssetImage("assets/images/ram.png"),
-                ),
+                CircleAvatar(radius: 26, backgroundImage: avatar),
                 if (online)
                   Positioned(
                     bottom: 2,
@@ -41,7 +62,7 @@ class ChatTile extends StatelessWidget {
                       width: 10,
                       height: 10,
                       decoration: BoxDecoration(
-                        color: const Color.fromARGB(255, 30, 38, 182),
+                        color: Colors.green,
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 2),
                       ),
@@ -52,13 +73,15 @@ class ChatTile extends StatelessWidget {
 
             const SizedBox(width: 14),
 
-            // 💬 NAME + MESSAGE
+            // 🔤 NAME + LAST MESSAGE
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -67,8 +90,9 @@ class ChatTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     message,
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
               ),
@@ -76,13 +100,15 @@ class ChatTile extends StatelessWidget {
 
             const SizedBox(width: 8),
 
-            // ⏰ TIME + UNREAD
+            // ⏰ TIME + UNREAD COUNT
             Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  time,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
+                if (time.isNotEmpty)
+                  Text(
+                    time,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 const SizedBox(height: 6),
                 if (unread > 0)
                   CircleAvatar(

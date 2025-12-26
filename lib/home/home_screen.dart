@@ -1,13 +1,62 @@
 import 'package:flutter/material.dart';
-import '../home/widgets/chat_tile.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'widgets/chat_tile.dart';
 import '../../utils/greeting_utils.dart';
 import '../chat/chat_screen.dart';
 import '../profile/profile_screen.dart';
 
-class HomeScreen extends StatelessWidget {
-  final String userName;
+class HomeScreen extends StatefulWidget {
+  final String userId;
 
-  const HomeScreen({super.key, required this.userName});
+  const HomeScreen({super.key, required this.userId});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  late final String myUid;
+
+  @override
+  void initState() {
+    super.initState();
+    myUid = widget.userId;
+    WidgetsBinding.instance.addObserver(this);
+    _setOnline(true);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _setOnline(false);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _setOnline(state == AppLifecycleState.resumed);
+  }
+
+  Future<void> _setOnline(bool value) async {
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(myUid).update({
+        'online': value,
+        'lastSeen': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+  }
+
+  String _chatId(String a, String b) {
+    final ids = [a, b]..sort();
+    return ids.join("_");
+  }
+
+  String _formatTime(Timestamp? time) {
+    if (time == null) return "";
+    final d = time.toDate();
+    return "${d.hour}:${d.minute.toString().padLeft(2, '0')}";
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +66,7 @@ class HomeScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF7F7F7),
       body: Column(
         children: [
-          // 🔵 TOP HEADER (NO OVERFLOW)
+          // 🔵 HEADER
           Container(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
             decoration: const BoxDecoration(
@@ -31,9 +80,7 @@ class HomeScreen extends StatelessWidget {
               bottom: false,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 🔝 TOP ROW
                   Row(
                     children: [
                       GestureDetector(
@@ -52,31 +99,7 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-
                       const Spacer(),
-
-                      // 🌡 TEMPERATURE
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.25),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.wb_sunny, color: Colors.white, size: 18),
-                            SizedBox(width: 6),
-                            Text("48°C", style: TextStyle(color: Colors.white)),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(width: 10),
-
-                      // ⚙ SETTINGS
                       IconButton(
                         icon: const Icon(Icons.settings, color: Colors.white),
                         onPressed: () {
@@ -85,7 +108,6 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 14),
 
                   // 👋 GREETING
@@ -93,128 +115,124 @@ class HomeScreen extends StatelessWidget {
                     "Hi, $greeting",
                     style: const TextStyle(color: Colors.white70, fontSize: 14),
                   ),
-
                   const SizedBox(height: 4),
 
-                  // 👤 USER NAME
-                  Text(
-                    userName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  // 🔥 REAL-TIME USER NAME (FIXED)
+                  StreamBuilder<DocumentSnapshot>(
+                    stream:
+                        FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(myUid)
+                            .snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return const Text(
+                          "Loading...",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        );
+                      }
 
-                  const SizedBox(height: 18),
+                      final data =
+                          snapshot.data!.data() as Map<String, dynamic>;
+                      final name = data['name'] ?? "User";
 
-                  // 👥 USER COUNTS
-                  Row(
-                    children: const [
-                      Expanded(
-                        child: _UserCountCard(
-                          title: "Registered Users",
-                          count: "190",
+                      return Text(
+                        name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
                         ),
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: _UserCountCard(
-                          title: "Online Users",
-                          count: "86",
-                        ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ],
               ),
             ),
           ),
 
-          // 🧾 CHAT LIST
+          // 🔥 USERS LIST
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(top: 8),
-              children: [
-                ChatTile(
-                  name: "Venkatesh",
-                  message: "Meet me Tomorrow",
-                  time: "05:26 PM",
-                  unread: 2,
-                  online: true,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (_) => const ChatScreen(
-                              userName: "Venkatesh",
-                              profileImage:
-                                  "assets/images/profile.png", // ✅ fixed
-                            ),
-                      ),
+            child: StreamBuilder<QuerySnapshot>(
+              stream:
+                  FirebaseFirestore.instance.collection('users').snapshots(),
+              builder: (context, userSnap) {
+                if (!userSnap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final users =
+                    userSnap.data!.docs.where((u) => u.id != myUid).toList();
+
+                return ListView.builder(
+                  itemCount: users.length,
+                  itemBuilder: (context, index) {
+                    final user = users[index];
+                    final userData = user.data() as Map<String, dynamic>;
+                    final chatId = _chatId(myUid, user.id);
+
+                    return StreamBuilder<QuerySnapshot>(
+                      stream:
+                          FirebaseFirestore.instance
+                              .collection('chats')
+                              .doc(chatId)
+                              .collection('messages')
+                              .orderBy('timestamp', descending: true)
+                              .snapshots(),
+                      builder: (context, msgSnap) {
+                        String lastMsg = "Tap to chat";
+                        String time = "";
+                        int unread = 0;
+
+                        if (msgSnap.hasData && msgSnap.data!.docs.isNotEmpty) {
+                          final docs = msgSnap.data!.docs;
+                          final last = docs.first;
+                          final data = last.data() as Map<String, dynamic>;
+
+                          lastMsg = data['text'] ?? "";
+                          if (data['timestamp'] != null) {
+                            time = _formatTime(data['timestamp']);
+                          }
+
+                          unread =
+                              docs.where((m) {
+                                final d = m.data() as Map<String, dynamic>;
+                                return d['receiverId'] == myUid &&
+                                    d['isSeen'] == false;
+                              }).length;
+                        }
+
+                        return ChatTile(
+                          name: userData['name'] ?? "User",
+                          message: lastMsg,
+                          time: time,
+                          unread: unread,
+                          online: userData['online'] ?? false,
+                          photoUrl: userData['photoUrl'] ?? "",
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (_) => ChatScreen(
+                                      userName: userData['name'] ?? "User",
+                                      photoUrl: userData['photoUrl'] ?? "",
+                                      otherUserId: user.id,
+                                    ),
+                              ),
+                            );
+                          },
+                        );
+                      },
                     );
                   },
-                ),
-
-                ChatTile(
-                  name: "Rajesh",
-                  message: "Did you have your Lunch?",
-                  time: "05:26 PM",
-                  unread: 1,
-                  online: true,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (_) => const ChatScreen(
-                              userName: "Rajesh",
-                              profileImage: "assets/images/pk.png", // ✅ exists
-                            ),
-                      ),
-                    );
-                  },
-                ),
-              ],
+                );
+              },
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// 🟢 USER COUNT CARD (SAFE SIZE)
-class _UserCountCard extends StatelessWidget {
-  final String title;
-  final String count;
-
-  const _UserCountCard({required this.title, required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            count,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ],
       ),
